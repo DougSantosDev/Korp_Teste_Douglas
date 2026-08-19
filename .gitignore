@@ -1,0 +1,26 @@
+# .NET
+**/bin/
+**/obj/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+
+# VS Code
+.vscode/
+
+# Angular / Node
+**/node_modules/
+**/dist/
+
+# Environment files
+.env
+.env.*
+
+# Local application settings
+**/appsettings.json
+**/appsettings.Development.json
+
+# Keep configuration example
+!**/appsettings.example.json
