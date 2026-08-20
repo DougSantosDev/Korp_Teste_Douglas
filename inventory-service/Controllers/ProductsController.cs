@@ -45,6 +45,17 @@ public class ProductsController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<Product>> Create([FromBody] Product product)
     {
+        var codeExists = await _context.Products
+            .AnyAsync(p => p.Code == product.Code);
+
+        if (codeExists)
+        {
+            return Conflict(new
+            {
+                message = "A product with this code already exists."
+            });
+        }
+
         _context.Products.Add(product);
 
         await _context.SaveChangesAsync();

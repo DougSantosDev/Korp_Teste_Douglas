@@ -11,4 +11,13 @@ public class InventoryDbContext : DbContext
     }
 
     public DbSet<Product> Products { get; set; }
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        base.OnModelCreating(modelBuilder);
+
+        modelBuilder.Entity<Product>()
+            .HasIndex(p => p.Code)
+            .IsUnique();
+    }
 }
