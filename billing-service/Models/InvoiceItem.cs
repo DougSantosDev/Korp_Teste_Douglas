@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace BillingService.Models;
 
 public class InvoiceItem
@@ -10,5 +12,6 @@ public class InvoiceItem
 
     public int Quantity { get; set; }
 
+    [JsonIgnore]
     public Invoice Invoice { get; set; } = null!;
 }
