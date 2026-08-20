@@ -1,6 +1,7 @@
 using BillingService.Data;
 using BillingService.DTOs;
 using BillingService.Models;
+using BillingService.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,10 +12,14 @@ namespace BillingService.Controllers;
 public class InvoicesController : ControllerBase
 {
     private readonly BillingDbContext _context;
+    private readonly InventoryServiceClient _inventoryServiceClient;
 
-    public InvoicesController(BillingDbContext context)
+    public InvoicesController(
+        BillingDbContext context,
+        InventoryServiceClient inventoryServiceClient)
     {
         _context = context;
+        _inventoryServiceClient = inventoryServiceClient;
     }
 
     // GET: /api/invoices
@@ -53,6 +58,20 @@ public class InvoicesController : ControllerBase
     public async Task<ActionResult<Invoice>> Create(
         [FromBody] CreateInvoiceRequest request)
     {
+        foreach (var item in request.Items)
+        {
+            var product = await _inventoryServiceClient
+                .GetProductByIdAsync(item.ProductId);
+
+            if (product is null)
+            {
+                return BadRequest(new
+                {
+                    message = $"Product {item.ProductId} does not exist."
+                });
+            }
+        }
+
         var lastNumber = await _context.Invoices
             .MaxAsync(i => (int?)i.Number) ?? 0;
 
