@@ -1,5 +1,6 @@
 using InventoryService.Data;
 using InventoryService.Models;
+using InventoryService.DTOs;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -65,5 +66,37 @@ public class ProductsController : ControllerBase
             new { id = product.Id },
             product
         );
+    }
+
+    // POST: /api/products/1/decrease-stock
+    [HttpPost("{id:int}/decrease-stock")]
+    public async Task<ActionResult<Product>> DecreaseStock(
+        int id,
+        [FromBody] DecreaseStockRequest request)
+    {
+        var product = await _context.Products
+            .FirstOrDefaultAsync(p => p.Id == id);
+
+        if (product is null)
+        {
+            return NotFound(new
+            {
+                message = "Product not found."
+            });
+        }
+
+        if (product.StockQuantity < request.Quantity)
+        {
+            return Conflict(new
+            {
+                message = "Insufficient stock."
+            });
+        }
+
+        product.StockQuantity -= request.Quantity;
+
+        await _context.SaveChangesAsync();
+
+        return Ok(product);
     }
 }
