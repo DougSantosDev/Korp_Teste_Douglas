@@ -1,6 +1,6 @@
 using InventoryService.Data;
-using InventoryService.Models;
 using InventoryService.DTOs;
+using InventoryService.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -36,7 +36,10 @@ public class ProductsController : ControllerBase
 
         if (product is null)
         {
-            return NotFound();
+            return NotFound(new
+            {
+                message = "Product not found."
+            });
         }
 
         return Ok(product);
@@ -44,7 +47,8 @@ public class ProductsController : ControllerBase
 
     // POST: /api/products
     [HttpPost]
-    public async Task<ActionResult<Product>> Create([FromBody] Product product)
+    public async Task<ActionResult<Product>> Create(
+        [FromBody] Product product)
     {
         var codeExists = await _context.Products
             .AnyAsync(p => p.Code == product.Code);
@@ -68,35 +72,60 @@ public class ProductsController : ControllerBase
         );
     }
 
-    // POST: /api/products/1/decrease-stock
-    [HttpPost("{id:int}/decrease-stock")]
-    public async Task<ActionResult<Product>> DecreaseStock(
-        int id,
-        [FromBody] DecreaseStockRequest request)
+    // POST: /api/products/decrease-stock
+    [HttpPost("decrease-stock")]
+    public async Task<ActionResult> DecreaseStockBatch(
+        [FromBody] DecreaseStockBatchRequest request)
     {
-        var product = await _context.Products
-            .FirstOrDefaultAsync(p => p.Id == id);
+        await using var transaction =
+            await _context.Database.BeginTransactionAsync();
 
-        if (product is null)
+        try
         {
-            return NotFound(new
+            foreach (var item in request.Items)
             {
-                message = "Product not found."
+                var product = await _context.Products
+                    .FirstOrDefaultAsync(
+                        p => p.Id == item.ProductId
+                    );
+
+                if (product is null)
+                {
+                    await transaction.RollbackAsync();
+
+                    return NotFound(new
+                    {
+                        message =
+                            $"Product {item.ProductId} not found."
+                    });
+                }
+
+                if (product.StockQuantity < item.Quantity)
+                {
+                    await transaction.RollbackAsync();
+
+                    return Conflict(new
+                    {
+                        message =
+                            $"Insufficient stock for product {product.Code}."
+                    });
+                }
+
+                product.StockQuantity -= item.Quantity;
+            }
+
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            return Ok(new
+            {
+                message = "Stock updated successfully."
             });
         }
-
-        if (product.StockQuantity < request.Quantity)
+        catch
         {
-            return Conflict(new
-            {
-                message = "Insufficient stock."
-            });
+            await transaction.RollbackAsync();
+            throw;
         }
-
-        product.StockQuantity -= request.Quantity;
-
-        await _context.SaveChangesAsync();
-
-        return Ok(product);
     }
 }
