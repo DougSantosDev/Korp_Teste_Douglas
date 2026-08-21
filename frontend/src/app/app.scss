@@ -3,18 +3,23 @@
   min-height: 100vh;
 }
 
+* {
+  box-sizing: border-box;
+}
+
 .app-layout {
   display: flex;
   min-height: 100vh;
   background: #f5f6f8;
+  overflow-x: hidden;
 }
 
 .sidebar {
   width: 240px;
+  flex-shrink: 0;
   background: #1f2937;
   color: white;
   padding: 24px 16px;
-  box-sizing: border-box;
 
   .brand {
     padding: 0 12px 24px;
@@ -61,10 +66,11 @@
 .main-content {
   flex: 1;
   min-width: 0;
+  overflow-x: hidden;
 }
 
 .topbar {
-  height: 70px;
+  min-height: 70px;
   padding: 0 32px;
   background: white;
   border-bottom: 1px solid #e5e7eb;
@@ -89,5 +95,25 @@
 }
 
 .page-content {
-  padding: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+@media (max-width: 768px) {
+  .app-layout {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+
+    nav {
+      flex-direction: row;
+      flex-wrap: wrap;
+    }
+  }
+
+  .topbar {
+    padding: 16px 20px;
+  }
 }
