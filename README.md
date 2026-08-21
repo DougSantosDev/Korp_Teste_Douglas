@@ -1,134 +1,158 @@
 # Korp — Sistema de Emissão de Notas Fiscais
 
-Aplicação desenvolvida para o teste técnico da Korp. O sistema permite cadastrar produtos, criar notas fiscais com múltiplos itens e imprimir uma nota aberta, fechando-a e baixando o estoque de forma transacional.
+Projeto desenvolvido para o teste técnico da **Korp**.
+
+Sistema para cadastro de produtos, controle de estoque e emissão de notas fiscais, utilizando **Angular**, **C# / ASP.NET Core**, arquitetura de **microsserviços** e **MySQL**.
 
 ## Arquitetura
 
 ```text
-Angular (porta 4200)
-   ├── HTTP ──> Inventory Service (porta 5277) ──> inventory_db
-   └── HTTP ──> Billing Service   (porta 5227) ──> billing_db
+Angular (4200)
+   │
+   ├── HTTP ──> Inventory Service (5277) ──> inventory_db
+   │
+   └── HTTP ──> Billing Service   (5227) ──> billing_db
+                         │
                          └── HTTP ──> Inventory Service
 ```
 
-- **Inventory Service:** cadastro de produtos, consulta e baixa atômica de estoque.
-- **Billing Service:** criação, numeração sequencial, consulta, impressão e fechamento de notas.
-- **Bancos separados:** cada microsserviço é proprietário dos seus dados em MySQL.
-- **Comunicação:** o Billing Service consulta e solicita a baixa ao Inventory Service por HTTP.
+- **Inventory Service:** cadastro de produtos e controle de estoque.
+- **Billing Service:** criação, consulta, impressão e fechamento de notas fiscais.
+- **Frontend:** interface Angular para produtos, notas fiscais e dashboard.
+- **Banco de dados:** cada microsserviço possui sua própria base MySQL.
 
 ## Funcionalidades
 
-- Cadastro de produto com código único, descrição e saldo não negativo.
-- Criação de nota com um ou mais produtos e status inicial `Open` (Aberta na interface).
-- Numeração sequencial protegida contra criações simultâneas.
-- Botão de impressão disponível somente para notas abertas.
-- Indicador `Processando...` durante a impressão.
-- Baixa transacional de todos os itens, fechamento da nota e documento para impressão pelo navegador após o sucesso.
-- Feedback para produto duplicado, saldo insuficiente e serviço indisponível.
-- Dashboard com totais de produtos e notas abertas/fechadas.
-- Layout responsivo.
+- Cadastro de produtos com código único, descrição e saldo.
+- Criação de notas fiscais com múltiplos produtos.
+- Numeração sequencial das notas.
+- Status `Open` e `Closed`.
+- Impressão de notas abertas.
+- Atualização automática do estoque após impressão.
+- Bloqueio de impressão de notas já fechadas.
+- Validação de estoque insuficiente.
+- Indicador de processamento durante a impressão.
+- Dashboard com resumo de produtos e notas.
+- Interface responsiva.
 
-## Consistência, concorrência e idempotência
+## Concorrência e Idempotência
 
-A impressão usa a chave estável `billing-invoice-{id}`. O Inventory Service persiste essa chave em `StockOperations` na mesma transação da baixa. Se a resposta HTTP for perdida depois do `commit`, uma nova tentativa reconhece a operação e responde com sucesso sem descontar o saldo novamente.
+A baixa de estoque é realizada de forma transacional e protegida contra operações simultâneas, evitando saldo negativo.
 
-A baixa utiliza um `UPDATE` condicional no banco:
+As operações de estoque utilizam uma chave de idempotência:
 
-```sql
-UPDATE Products
-SET StockQuantity = StockQuantity - @quantity
-WHERE Id = @productId AND StockQuantity >= @quantity;
+```text
+billing-invoice-{id}
 ```
 
-Assim, duas notas concorrendo pelo último item não conseguem deixar o estoque negativo: apenas uma alteração afeta uma linha; a outra recebe `409 Conflict`. Itens repetidos também são agrupados antes da validação.
+Isso impede que uma nova tentativa da mesma operação desconte o estoque mais de uma vez.
 
-A numeração usa uma linha em `InvoiceSequences`, lida com `SELECT ... FOR UPDATE` dentro de transação. Há ainda um índice único em `Invoices.Number` como garantia adicional.
+A numeração das notas também possui proteção contra criação simultânea, além de índice único no banco de dados.
 
-## Cenário obrigatório de falha
+## Tratamento de Falhas
 
-Para demonstrar a recuperação:
+Caso o **Inventory Service** esteja indisponível durante a impressão:
 
-1. Crie um produto e uma nota aberta.
-2. Pare o Inventory Service.
-3. Clique em **Imprimir**.
-4. O Billing Service tenta novamente uma vez e retorna `503 Service Unavailable`; a interface informa que o estoque está indisponível e a nota permanece aberta.
-5. Inicie novamente o Inventory Service e repita a impressão.
-6. A nota é fechada e o saldo é baixado uma única vez.
+1. O Billing Service realiza uma nova tentativa;
+2. Caso a falha continue, retorna `503 Service Unavailable`;
+3. A nota permanece aberta;
+4. O frontend apresenta uma mensagem ao usuário;
+5. A operação pode ser realizada novamente após a recuperação do serviço.
 
-O timeout do cliente HTTP é de cinco segundos. A repetição automática do `POST` é segura por causa da chave de idempotência.
+Também são tratados:
 
-## Detalhamento técnico
+- `400 Bad Request` — dados inválidos;
+- `404 Not Found` — recurso não encontrado;
+- `409 Conflict` — conflito de regra de negócio;
+- `500 Internal Server Error` — erro inesperado;
+- `503 Service Unavailable` — serviço dependente indisponível.
 
-### Angular e ciclos de vida
+Exceções inesperadas são tratadas globalmente utilizando `ProblemDetails`.
 
-Os componentes standalone `Dashboard`, `Products` e `Invoices` implementam `OnInit` e usam `ngOnInit()` para carregar os dados iniciais. Não foi necessário `OnDestroy`, pois os `Observable` do `HttpClient` completam após uma única resposta e não existem subscriptions de longa duração.
+## Tecnologias
 
-### RxJS
+### Frontend
 
-- Os serviços retornam `Observable<T>` do `HttpClient`.
-- Os componentes tratam sucesso e falha com `subscribe({ next, error })`.
-- `forkJoin` carrega produtos e notas do dashboard em paralelo.
-- `finalize` encerra os indicadores de carregamento mesmo quando ocorre erro.
+- Angular 21
+- TypeScript
+- Angular Router
+- Angular Forms
+- Angular HttpClient
+- RxJS 7
+- SCSS
+- Vitest
 
-### Bibliotecas do frontend
+### Backend
 
-| Biblioteca | Finalidade |
-|---|---|
-| Angular 21 | Componentes standalone e estrutura da SPA |
-| Angular Router | Navegação entre dashboard, produtos e notas |
-| Angular Forms | Formulários template-driven e validação |
-| Angular HttpClient | Integração HTTP com os microsserviços |
-| RxJS 7 | Composição assíncrona, `Observable`, `forkJoin` e `finalize` |
-| Vitest | Testes automatizados do frontend |
+- C#
+- .NET 10
+- ASP.NET Core Web API
+- Entity Framework Core
+- LINQ
+- HttpClientFactory
 
-Não foi usada biblioteca visual externa. A interface foi construída com templates Angular, HTML semântico e SCSS próprios.
+### Banco de Dados
 
-### Backend C#
+- MySQL
+- Entity Framework Core Migrations
 
-Os dois serviços usam C# com .NET 10, ASP.NET Core Web API e Entity Framework Core. O provider `MySql.EntityFrameworkCore` faz a integração com MySQL; `HttpClientFactory` configura a comunicação entre serviços.
+Não foi utilizada biblioteca visual externa. A interface foi construída com Angular, HTML e SCSS.
 
-Não há implementação em Golang, portanto gerenciamento de dependências com `go.mod` não se aplica. No C#, as dependências são declaradas nos arquivos `.csproj` e restauradas pelo NuGet com `dotnet restore`.
+## Angular e RxJS
 
-### LINQ
+O ciclo de vida `ngOnInit()` é utilizado para carregar os dados iniciais dos componentes.
 
-LINQ é usado junto ao EF Core e em memória para:
+O RxJS é utilizado nas requisições HTTP através de `Observable`, além de:
 
-- `AnyAsync` e `FirstOrDefaultAsync`: existência e busca de registros;
-- `Include`: carregamento dos itens de cada nota;
-- `OrderBy` e `ToListAsync`: ordenação e materialização das consultas;
-- `GroupBy`, `Select` e `Sum`: consolidação de itens repetidos;
-- `Where` com `ExecuteUpdateAsync`: fechamento condicional da nota;
-- `AsNoTracking`: leituras usadas apenas para validação.
+- `subscribe` para tratamento das respostas;
+- `forkJoin` para requisições paralelas no Dashboard;
+- `finalize` para controle dos indicadores de carregamento.
 
-### Erros e exceções
+## LINQ
 
-- A validação por Data Annotations e `[ApiController]` retorna `400 Bad Request`.
-- Recursos inexistentes retornam `404 Not Found`.
-- Código duplicado, nota já fechada e saldo insuficiente retornam `409 Conflict`.
-- Falhas e timeouts do Inventory Service são convertidos em `503 Service Unavailable`.
-- Um `IExceptionHandler` global registra exceções inesperadas e devolve `ProblemDetails` com `500`, sem expor stack trace ao cliente.
-- Transações são revertidas automaticamente quando qualquer item da baixa falha.
-- `CancellationToken` propaga cancelamento do cliente às consultas e chamadas HTTP.
+O backend utiliza LINQ junto ao Entity Framework Core para consultas e manipulação dos dados.
 
-## Banco de dados
+Principais operações utilizadas:
 
-O projeto usa MySQL com persistência física e migrations do EF Core. As bases esperadas são:
+- `AnyAsync`
+- `FirstOrDefaultAsync`
+- `OrderBy`
+- `GroupBy`
+- `Select`
+- `Sum`
+- `ToListAsync`
+- `AsNoTracking`
+- `ExecuteUpdateAsync`
 
-- `inventory_db`
-- `billing_db`
+## Banco de Dados
 
-Os arquivos reais `appsettings.json` não são versionados. Copie o exemplo de cada serviço:
+São utilizadas duas bases MySQL:
 
-```powershell
-Copy-Item inventory-service/appsettings.example.json inventory-service/appsettings.json
-Copy-Item billing-service/appsettings.example.json billing-service/appsettings.json
+```text
+inventory_db
+billing_db
 ```
 
-Edite usuário e senha nas connection strings. `SslMode=Disabled` é adequado para a instância local sem TLS; em produção, configure certificados e um modo SSL compatível. A URL do estoque usada pelo Billing Service fica em `Services:InventoryUrl`.
+A estrutura é gerenciada através das migrations do Entity Framework Core.
 
-## Como executar
+Os arquivos reais `appsettings.json` não são versionados. Cada serviço possui um:
 
-Pré-requisitos: .NET SDK 10, Node.js, npm e MySQL 8 ou superior.
+```text
+appsettings.example.json
+```
+
+para configuração do ambiente local.
+
+## Como Executar
+
+### Pré-requisitos
+
+- .NET SDK 10
+- Node.js
+- npm
+- MySQL 8+
+
+### Inventory Service
 
 ```powershell
 cd inventory-service
@@ -137,7 +161,13 @@ dotnet ef database update
 dotnet run
 ```
 
-Em outro terminal:
+Disponível em:
+
+```text
+http://localhost:5277
+```
+
+### Billing Service
 
 ```powershell
 cd billing-service
@@ -146,7 +176,13 @@ dotnet ef database update
 dotnet run
 ```
 
-Em um terceiro terminal:
+Disponível em:
+
+```text
+http://localhost:5227
+```
+
+### Frontend
 
 ```powershell
 cd frontend
@@ -154,9 +190,13 @@ npm install
 npm start
 ```
 
-Acesse `http://localhost:4200`.
+Acesse:
 
-## Testes e validação
+```text
+http://localhost:4200
+```
+
+## Testes
 
 ```powershell
 dotnet build inventory-service/inventory-service.csproj
@@ -167,30 +207,18 @@ npm test -- --watch=false
 npm run build
 ```
 
-Os testes do frontend verificam a inicialização da aplicação, a marca exibida, a consolidação de produtos repetidos, a validação de saldo e a tradução dos status.
-
-## Endpoints principais
-
-| Método | Endpoint | Descrição |
-|---|---|---|
-| `GET` | Inventory `/api/products` | Lista produtos |
-| `POST` | Inventory `/api/products` | Cadastra produto |
-| `POST` | Inventory `/api/products/decrease-stock` | Baixa lote idempotente |
-| `GET` | Billing `/api/invoices` | Lista notas e itens |
-| `POST` | Billing `/api/invoices` | Cria nota aberta |
-| `POST` | Billing `/api/invoices/{id}/print` | Baixa estoque e fecha a nota |
-
-
 ## Estrutura
 
 ```text
 Korp_Teste_Douglas/
 ├── frontend/             # Angular
-├── inventory-service/    # ASP.NET Core + inventory_db
-├── billing-service/      # ASP.NET Core + billing_db
+├── inventory-service/    # ASP.NET Core / inventory_db
+├── billing-service/      # ASP.NET Core / billing_db
 └── README.md
 ```
 
 ## Autor
 
-Douglas Santos
+**Douglas Santos**
+
+Projeto desenvolvido para o teste técnico da Korp.
