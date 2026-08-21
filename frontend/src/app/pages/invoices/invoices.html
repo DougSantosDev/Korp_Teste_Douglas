@@ -1,0 +1,161 @@
+<section class="invoices-page">
+  <h1>Notas Fiscais</h1>
+
+  <section class="invoice-form">
+    <h2>Nova Nota Fiscal</h2>
+
+    <div class="item-row">
+      <div>
+        <label for="product">Produto</label>
+
+        <select
+          id="product"
+          name="product"
+          [(ngModel)]="selectedProductId"
+        >
+          <option [ngValue]="0">
+            Selecione um produto
+          </option>
+
+          @for (product of products; track product.id) {
+            <option [ngValue]="product.id">
+              {{ product.code }} - {{ product.description }}
+              (Saldo: {{ product.stockQuantity }})
+            </option>
+          }
+        </select>
+      </div>
+
+      <div>
+        <label for="quantity">Quantidade</label>
+
+        <input
+          id="quantity"
+          name="quantity"
+          type="number"
+          min="1"
+          [(ngModel)]="selectedQuantity"
+        />
+      </div>
+
+      <button type="button" (click)="addItem()">
+        Adicionar
+      </button>
+    </div>
+
+    @if (items.length > 0) {
+      <table>
+        <thead>
+          <tr>
+            <th>Produto</th>
+            <th>Quantidade</th>
+            <th>Ação</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          @for (item of items; track $index) {
+            <tr>
+              <td>
+                {{ getProductDescription(item.productId) }}
+              </td>
+
+              <td>
+                {{ item.quantity }}
+              </td>
+
+              <td>
+                <button
+                  type="button"
+                  (click)="removeItem($index)"
+                >
+                  Remover
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+
+    <button
+      type="button"
+      (click)="createInvoice()"
+      [disabled]="submitting || items.length === 0"
+    >
+      @if (submitting) {
+        Criando...
+      } @else {
+        Criar Nota Fiscal
+      }
+    </button>
+  </section>
+
+  @if (successMessage) {
+    <p class="success">
+      {{ successMessage }}
+    </p>
+  }
+
+  @if (errorMessage) {
+    <p class="error">
+      {{ errorMessage }}
+    </p>
+  }
+
+  <section>
+    <h2>Notas cadastradas</h2>
+
+    @if (loading) {
+      <p>Carregando notas...</p>
+    } @else {
+      <table>
+        <thead>
+          <tr>
+            <th>Número</th>
+            <th>Status</th>
+            <th>Itens</th>
+            <th>Ação</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          @for (invoice of invoices; track invoice.id) {
+            <tr>
+              <td>
+                #{{ invoice.number }}
+              </td>
+
+              <td>
+                {{ invoice.status }}
+              </td>
+
+              <td>
+                {{ invoice.items.length }}
+              </td>
+
+              <td>
+                <button
+                  type="button"
+                  (click)="printInvoice(invoice)"
+                  [disabled]="
+                    invoice.status !== 'Open' ||
+                    printingId === invoice.id
+                  "
+                >
+                  @if (printingId === invoice.id) {
+                    Processando...
+                  } @else if (invoice.status === 'Closed') {
+                    Fechada
+                  } @else {
+                    Imprimir
+                  }
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
+  </section>
+</section>
