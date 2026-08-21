@@ -1,0 +1,33 @@
+<section class="products-page">
+  <h1>Produtos</h1>
+
+  @if (loading) {
+    <p>Carregando produtos...</p>
+  }
+
+  @if (errorMessage) {
+    <p class="error">{{ errorMessage }}</p>
+  }
+
+  @if (!loading && !errorMessage) {
+    <table>
+      <thead>
+        <tr>
+          <th>Código</th>
+          <th>Descrição</th>
+          <th>Saldo</th>
+        </tr>
+      </thead>
+
+      <tbody>
+        @for (product of products; track product.id) {
+          <tr>
+            <td>{{ product.code }}</td>
+            <td>{{ product.description }}</td>
+            <td>{{ product.stockQuantity }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+</section>

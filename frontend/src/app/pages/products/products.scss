@@ -1,0 +1,27 @@
+.products-page {
+  padding: 24px;
+
+  h1 {
+    margin-bottom: 24px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  th,
+  td {
+    padding: 12px;
+    border-bottom: 1px solid #ddd;
+    text-align: left;
+  }
+
+  th {
+    font-weight: 600;
+  }
+
+  .error {
+    color: #b00020;
+  }
+}
