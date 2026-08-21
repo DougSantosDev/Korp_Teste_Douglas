@@ -1,6 +1,25 @@
 @billing_service_HostAddress = http://localhost:5227
 
-GET {{billing_service_HostAddress}}/weatherforecast/
+GET {{billing_service_HostAddress}}/api/invoices
 Accept: application/json
 
 ###
+
+POST {{billing_service_HostAddress}}/api/invoices
+Content-Type: application/json
+
+{
+  "items": [
+    {
+      "productId": 1,
+      "quantity": 2
+    }
+  ]
+}
+
+###
+
+POST {{billing_service_HostAddress}}/api/invoices/1/print
+Content-Type: application/json
+
+{}

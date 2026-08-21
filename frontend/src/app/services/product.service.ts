@@ -4,10 +4,9 @@ import { Observable } from 'rxjs';
 import { Product } from '../models/product';
 
 @Injectable({
-  providedIn: 'root'
+  providedIn: 'root',
 })
 export class ProductService {
-
   private readonly apiUrl = 'http://localhost:5277/api/products';
 
   constructor(private http: HttpClient) {}
@@ -21,9 +20,6 @@ export class ProductService {
   }
 
   create(product: Omit<Product, 'id'>): Observable<Product> {
-    return this.http.post<Product>(
-      this.apiUrl,
-      product
-    );
+    return this.http.post<Product>(this.apiUrl, product);
   }
 }

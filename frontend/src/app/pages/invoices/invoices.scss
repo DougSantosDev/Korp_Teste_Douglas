@@ -150,6 +150,31 @@ table {
   }
 }
 
+.invoice-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+
+  li {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  strong {
+    color: #1f2937;
+    font-size: 13px;
+  }
+
+  span {
+    color: #6b7280;
+    font-size: 12px;
+  }
+}
+
 .success,
 .error {
   padding: 12px 16px;
@@ -160,6 +185,68 @@ table {
 .success {
   background: #ecfdf5;
   color: #065f46;
+}
+
+.print-document {
+  display: none;
+}
+
+@media print {
+  :host {
+    display: block;
+    color: #111;
+  }
+
+  .invoices-page {
+    max-width: none;
+    padding: 0;
+
+    > :not(.print-document) {
+      display: none !important;
+    }
+  }
+
+  .print-document {
+    display: block;
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      padding-bottom: 18px;
+      border-bottom: 2px solid #111;
+
+      div {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+
+        &:last-child {
+          text-align: right;
+        }
+      }
+
+      strong {
+        font-size: 20px;
+      }
+    }
+
+    table {
+      margin-top: 18px;
+    }
+
+    footer {
+      margin-top: 28px;
+      padding-top: 12px;
+      border-top: 1px solid #9ca3af;
+      color: #4b5563;
+      font-size: 12px;
+    }
+  }
+
+  .print-status {
+    margin-top: 18px;
+    font-weight: 700;
+  }
 }
 
 .error {

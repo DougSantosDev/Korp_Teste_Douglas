@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { finalize } from 'rxjs';
 
 import { ProductService } from '../../services/product.service';
 import { Product } from '../../models/product';
@@ -10,7 +11,7 @@ import { Product } from '../../models/product';
   standalone: true,
   imports: [CommonModule, FormsModule],
   templateUrl: './products.html',
-  styleUrl: './products.scss'
+  styleUrl: './products.scss',
 })
 export class Products implements OnInit {
   products: Product[] = [];
@@ -22,7 +23,7 @@ export class Products implements OnInit {
   newProduct = {
     code: '',
     description: '',
-    stockQuantity: 0
+    stockQuantity: 0,
   };
 
   constructor(private productService: ProductService) {}
@@ -35,16 +36,17 @@ export class Products implements OnInit {
     this.loading = true;
     this.errorMessage = '';
 
-    this.productService.getAll().subscribe({
-      next: (products) => {
-        this.products = products;
-        this.loading = false;
-      },
-      error: () => {
-        this.errorMessage = 'Não foi possível carregar os produtos.';
-        this.loading = false;
-      }
-    });
+    this.productService
+      .getAll()
+      .pipe(finalize(() => (this.loading = false)))
+      .subscribe({
+        next: (products) => {
+          this.products = products;
+        },
+        error: () => {
+          this.errorMessage = 'Não foi possível carregar os produtos.';
+        },
+      });
   }
 
   createProduct(): void {
@@ -52,29 +54,33 @@ export class Products implements OnInit {
     this.errorMessage = '';
     this.successMessage = '';
 
-    this.productService.create(this.newProduct).subscribe({
-      next: () => {
-        this.successMessage = 'Produto cadastrado com sucesso.';
-        this.submitting = false;
+    this.productService
+      .create({
+        code: this.newProduct.code.trim(),
+        description: this.newProduct.description.trim(),
+        stockQuantity: this.newProduct.stockQuantity,
+      })
+      .pipe(finalize(() => (this.submitting = false)))
+      .subscribe({
+        next: () => {
+          this.successMessage = 'Produto cadastrado com sucesso.';
 
-        this.newProduct = {
-          code: '',
-          description: '',
-          stockQuantity: 0
-        };
+          this.newProduct = {
+            code: '',
+            description: '',
+            stockQuantity: 0,
+          };
 
-        this.loadProducts();
-      },
-      error: (error) => {
-        this.submitting = false;
+          this.loadProducts();
+        },
+        error: (error) => {
+          if (error.status === 409) {
+            this.errorMessage = 'Já existe um produto com este código.';
+            return;
+          }
 
-        if (error.status === 409) {
-          this.errorMessage = 'Já existe um produto com este código.';
-          return;
-        }
-
-        this.errorMessage = 'Não foi possível cadastrar o produto.';
-      }
-    });
+          this.errorMessage = 'Não foi possível cadastrar o produto.';
+        },
+      });
   }
 }

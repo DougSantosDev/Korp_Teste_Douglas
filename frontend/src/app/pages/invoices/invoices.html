@@ -1,144 +1,204 @@
 <section class="invoices-page">
-    <h1>Notas Fiscais</h1>
+  <h1>Notas Fiscais</h1>
 
-    <section class="invoice-form">
-        <h2>Nova Nota Fiscal</h2>
+  <section class="invoice-form">
+    <h2>Nova Nota Fiscal</h2>
 
-        <div class="item-row">
-            <div>
-                <label for="product">Produto</label>
+    <div class="item-row">
+      <div>
+        <label for="product">Produto</label>
 
-                <select id="product" name="product" [(ngModel)]="selectedProductId">
-                    <option [ngValue]="0">
-                        Selecione um produto
-                    </option>
+        <select id="product" name="product" [(ngModel)]="selectedProductId">
+          <option [ngValue]="0">Selecione um produto</option>
 
-                    @for (product of products; track product.id) {
-                    <option [ngValue]="product.id">
-                        {{ product.code }} - {{ product.description }}
-                        (Saldo: {{ product.stockQuantity }})
-                    </option>
-                    }
-                </select>
-            </div>
+          @for (product of products; track product.id) {
+            <option [ngValue]="product.id" [disabled]="product.stockQuantity === 0">
+              {{ product.code }} - {{ product.description }} (Saldo: {{ product.stockQuantity }})
+            </option>
+          }
+        </select>
+      </div>
 
-            <div>
-                <label for="quantity">Quantidade</label>
+      <div>
+        <label for="quantity">Quantidade</label>
 
-                <input id="quantity" name="quantity" type="number" min="1" [(ngModel)]="selectedQuantity" />
-            </div>
+        <input
+          id="quantity"
+          name="quantity"
+          type="number"
+          min="1"
+          step="1"
+          [(ngModel)]="selectedQuantity"
+        />
+      </div>
 
-            <button class="secondary-button" type="button" (click)="addItem()">
-                Adicionar
-            </button>
-        </div>
+      <button class="secondary-button" type="button" (click)="addItem()">Adicionar</button>
+    </div>
 
-        @if (items.length > 0) {
-        <table>
-            <thead>
-                <tr>
-                    <th>Produto</th>
-                    <th>Quantidade</th>
-                    <th>Ação</th>
-                </tr>
-            </thead>
+    @if (items.length > 0) {
+      <table>
+        <thead>
+          <tr>
+            <th>Produto</th>
+            <th>Quantidade</th>
+            <th>Ação</th>
+          </tr>
+        </thead>
 
-            <tbody>
-                @for (item of items; track $index) {
-                <tr>
-                    <td>
-                        {{ getProductDescription(item.productId) }}
-                    </td>
+        <tbody>
+          @for (item of items; track $index) {
+            <tr>
+              <td>
+                {{ getProductDescription(item.productId) }}
+              </td>
 
-                    <td>
-                        {{ item.quantity }}
-                    </td>
+              <td>
+                {{ item.quantity }}
+              </td>
 
-                    <td>
-                        <button class="secondary-button" type="button" (click)="removeItem($index)">
-                            Remover
-                        </button>
-                    </td>
-                </tr>
-                }
-            </tbody>
-        </table>
-        }
+              <td>
+                <button class="secondary-button" type="button" (click)="removeItem($index)">
+                  Remover
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    }
 
-        <button class="primary-button" type="button" (click)="createInvoice()"
-            [disabled]="submitting || items.length === 0">
-            @if (submitting) {
-            Criando...
-            } @else {
-            Criar Nota Fiscal
-            }
-        </button>
-    </section>
+    <button
+      class="primary-button"
+      type="button"
+      (click)="createInvoice()"
+      [disabled]="submitting || items.length === 0"
+    >
+      @if (submitting) {
+        Criando...
+      } @else {
+        Criar Nota Fiscal
+      }
+    </button>
+  </section>
 
-    @if (successMessage) {
+  @if (successMessage) {
     <p class="success">
-        {{ successMessage }}
+      {{ successMessage }}
     </p>
-    }
+  }
 
-    @if (errorMessage) {
+  @if (errorMessage) {
     <p class="error">
-        {{ errorMessage }}
+      {{ errorMessage }}
     </p>
-    }
+  }
 
-    <section class="invoices-list">
-        <h2>Notas cadastradas</h2>
+  <section class="invoices-list">
+    <h2>Notas cadastradas</h2>
 
-        @if (loading) {
-        <p>Carregando notas...</p>
-        } @else {
+    @if (loading) {
+      <p>Carregando notas...</p>
+    } @else {
+      @if (invoices.length === 0) {
+        <p>Nenhuma nota fiscal cadastrada.</p>
+      } @else {
         <table>
-            <thead>
-                <tr>
-                    <th>Número</th>
-                    <th>Status</th>
-                    <th>Itens</th>
-                    <th>Ação</th>
-                </tr>
-            </thead>
+          <thead>
+            <tr>
+              <th>Número</th>
+              <th>Status</th>
+              <th>Itens</th>
+              <th>Ação</th>
+            </tr>
+          </thead>
 
-            <tbody>
-                @for (invoice of invoices; track invoice.id) {
-                <tr>
-                    <td>
-                        #{{ invoice.number }}
-                    </td>
+          <tbody>
+            @for (invoice of invoices; track invoice.id) {
+              <tr>
+                <td>#{{ invoice.number }}</td>
 
-                    <td>
-                        <span class="status" [class.open]="invoice.status === 'Open'"
-                            [class.closed]="invoice.status === 'Closed'">
-                            {{ invoice.status }}
+                <td>
+                  <span
+                    class="status"
+                    [class.open]="invoice.status === 'Open'"
+                    [class.closed]="invoice.status === 'Closed'"
+                  >
+                    {{ getStatusLabel(invoice.status) }}
+                  </span>
+                </td>
+
+                <td>
+                  <ul class="invoice-items">
+                    @for (item of invoice.items; track item.id ?? item.productId) {
+                      <li>
+                        <strong>{{ getProductDescription(item.productId) }}</strong>
+                        <span>
+                          Código: {{ getProductCode(item.productId) }} · Quantidade:
+                          {{ item.quantity }}
                         </span>
-                    </td>
+                      </li>
+                    }
+                  </ul>
+                </td>
 
-                    <td>
-                        {{ invoice.items.length }}
-                    </td>
-
-                    <td>
-                        <button type="button" (click)="printInvoice(invoice)" [disabled]="
-                    invoice.status !== 'Open' ||
-                    printingId === invoice.id
-                  ">
-                            @if (printingId === invoice.id) {
-                            Processando...
-                            } @else if (invoice.status === 'Closed') {
-                            Fechada
-                            } @else {
-                            Imprimir
-                            }
-                        </button>
-                    </td>
-                </tr>
-                }
-            </tbody>
+                <td>
+                  <button
+                    type="button"
+                    (click)="printInvoice(invoice)"
+                    [disabled]="invoice.status !== 'Open' || printingId !== null"
+                  >
+                    @if (printingId === invoice.id) {
+                      Processando...
+                    } @else if (invoice.status === 'Closed') {
+                      Fechada
+                    } @else {
+                      Imprimir
+                    }
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
         </table>
-        }
+      }
+    }
+  </section>
+
+  @if (invoiceToPrint) {
+    <section class="print-document">
+      <header>
+        <div>
+          <strong>Korp ERP</strong>
+          <span>Nota Fiscal</span>
+        </div>
+        <div>
+          <strong>#{{ invoiceToPrint.number }}</strong>
+          <span>{{ invoiceToPrint.createdAt | date: 'dd/MM/yyyy HH:mm' }}</span>
+        </div>
+      </header>
+
+      <div class="print-status">Status: {{ getStatusLabel(invoiceToPrint.status) }}</div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Código</th>
+            <th>Produto</th>
+            <th>Quantidade</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (item of invoiceToPrint.items; track item.id ?? item.productId) {
+            <tr>
+              <td>{{ getProductCode(item.productId) }}</td>
+              <td>{{ getProductDescription(item.productId) }}</td>
+              <td>{{ item.quantity }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+
+      <footer>Emitida pelo Sistema de Emissão de Notas Fiscais Korp ERP.</footer>
     </section>
+  }
 </section>

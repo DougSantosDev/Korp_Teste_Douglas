@@ -1,70 +1,95 @@
 <section class="products-page">
   <h1>Produtos</h1>
 
-  <form class="product-form" (ngSubmit)="createProduct()">
+  <form #productForm="ngForm" class="product-form" (ngSubmit)="createProduct()">
     <div>
       <label for="code">Código</label>
-      <input id="code" name="code" type="text" [(ngModel)]="newProduct.code" required />
+      <input
+        id="code"
+        name="code"
+        type="text"
+        maxlength="50"
+        [(ngModel)]="newProduct.code"
+        required
+      />
     </div>
 
     <div>
       <label for="description">Descrição</label>
-      <input id="description" name="description" type="text" [(ngModel)]="newProduct.description" required />
+      <input
+        id="description"
+        name="description"
+        type="text"
+        maxlength="150"
+        [(ngModel)]="newProduct.description"
+        required
+      />
     </div>
 
     <div>
       <label for="stockQuantity">Saldo</label>
-      <input id="stockQuantity" name="stockQuantity" type="number" min="0" [(ngModel)]="newProduct.stockQuantity"
-        required />
+      <input
+        id="stockQuantity"
+        name="stockQuantity"
+        type="number"
+        min="0"
+        [(ngModel)]="newProduct.stockQuantity"
+        required
+      />
     </div>
 
-    <button type="submit" [disabled]="submitting">
+    <button type="submit" [disabled]="submitting || productForm.invalid">
       @if (submitting) {
-      Cadastrando...
+        Cadastrando...
       } @else {
-      Cadastrar Produto
+        Cadastrar Produto
       }
     </button>
   </form>
 
   @if (successMessage) {
-  <p class="success">{{ successMessage }}</p>
+    <p class="success">{{ successMessage }}</p>
   }
 
   @if (errorMessage) {
-  <p class="error">{{ errorMessage }}</p>
+    <p class="error">{{ errorMessage }}</p>
   }
 
   <section class="products-table">
     <h2>Produtos cadastrados</h2>
 
     @if (loading) {
-    <p>Carregando produtos...</p>
+      <p>Carregando produtos...</p>
     }
 
     @if (!loading) {
-    <table>
-      <thead>
-        <tr>
-          <th>Código</th>
-          <th>Descrição</th>
-          <th>Saldo</th>
-        </tr>
-      </thead>
+      @if (products.length === 0) {
+        <p>Nenhum produto cadastrado.</p>
+      } @else {
+        <table>
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Descrição</th>
+              <th>Saldo</th>
+            </tr>
+          </thead>
 
-      <tbody>
-        @for (product of products; track product.id) {
-        <tr>
-          <td>{{ product.code }}</td>
-          <td>{{ product.description }}</td>
-          <td>
-            <span class="stock">
-              {{ product.stockQuantity }}
-            </span>
-          </td>
-        </tr>
-        }
-      </tbody>
-    </table>
+          <tbody>
+            @for (product of products; track product.id) {
+              <tr>
+                <td>{{ product.code }}</td>
+                <td>{{ product.description }}</td>
+                <td>
+                  <span class="stock">
+                    {{ product.stockQuantity }}
+                  </span>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
     }
   </section>
+</section>

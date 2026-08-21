@@ -1,4 +1,5 @@
 using BillingService.Data;
+using BillingService.Infrastructure;
 using BillingService.Services;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json.Serialization;
@@ -15,6 +16,8 @@ builder.Services
     });
 
 builder.Services.AddOpenApi();
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+builder.Services.AddProblemDetails();
 
 builder.Services.AddCors(options =>
 {
@@ -30,17 +33,27 @@ builder.Services.AddCors(options =>
 var connectionString =
     builder.Configuration.GetConnectionString("DefaultConnection");
 
+if (connectionString?.Contains("server=localhost", StringComparison.OrdinalIgnoreCase) == true &&
+    !connectionString.Contains("SslMode", StringComparison.OrdinalIgnoreCase))
+{
+    connectionString += ";SslMode=Disabled;";
+}
+
 builder.Services.AddDbContext<BillingDbContext>(options =>
     options.UseMySQL(connectionString!)
 );
 
 builder.Services.AddHttpClient<InventoryServiceClient>(client =>
 {
-    client.BaseAddress = new Uri("http://localhost:5277");
+    client.BaseAddress = new Uri(
+        builder.Configuration["Services:InventoryUrl"]
+        ?? "http://localhost:5277");
+    client.Timeout = TimeSpan.FromSeconds(5);
 });
 
 var app = builder.Build();
 
+app.UseExceptionHandler();
 app.UseCors("AllowAngular");
 
 if (app.Environment.IsDevelopment())

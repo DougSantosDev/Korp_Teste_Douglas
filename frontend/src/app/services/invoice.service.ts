@@ -5,7 +5,7 @@ import { Observable } from 'rxjs';
 import { Invoice, InvoiceItem } from '../models/invoice';
 
 @Injectable({
-  providedIn: 'root'
+  providedIn: 'root',
 })
 export class InvoiceService {
   private readonly apiUrl = 'http://localhost:5227/api/invoices';
@@ -18,14 +18,11 @@ export class InvoiceService {
 
   create(items: InvoiceItem[]): Observable<Invoice> {
     return this.http.post<Invoice>(this.apiUrl, {
-      items
+      items,
     });
   }
 
   print(id: number): Observable<unknown> {
-    return this.http.post(
-      `${this.apiUrl}/${id}/print`,
-      {}
-    );
+    return this.http.post(`${this.apiUrl}/${id}/print`, {});
   }
 }

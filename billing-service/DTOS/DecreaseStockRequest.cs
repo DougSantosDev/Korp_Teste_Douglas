@@ -2,6 +2,8 @@ namespace BillingService.DTOs;
 
 public class DecreaseStockRequest
 {
+    public string IdempotencyKey { get; set; } = string.Empty;
+
     public List<DecreaseStockItemRequest> Items { get; set; } = [];
 }
 

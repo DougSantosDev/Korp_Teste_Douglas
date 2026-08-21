@@ -24,23 +24,26 @@ public class InvoicesController : ControllerBase
 
     // GET: /api/invoices
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<Invoice>>> GetAll()
+    public async Task<ActionResult<IEnumerable<Invoice>>> GetAll(
+        CancellationToken cancellationToken)
     {
         var invoices = await _context.Invoices
             .Include(i => i.Items)
             .OrderBy(i => i.Number)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
         return Ok(invoices);
     }
 
     // GET: /api/invoices/1
     [HttpGet("{id:int}")]
-    public async Task<ActionResult<Invoice>> GetById(int id)
+    public async Task<ActionResult<Invoice>> GetById(
+        int id,
+        CancellationToken cancellationToken)
     {
         var invoice = await _context.Invoices
             .Include(i => i.Items)
-            .FirstOrDefaultAsync(i => i.Id == id);
+            .FirstOrDefaultAsync(i => i.Id == id, cancellationToken);
 
         if (invoice is null)
         {
@@ -56,31 +59,70 @@ public class InvoicesController : ControllerBase
     // POST: /api/invoices
     [HttpPost]
     public async Task<ActionResult<Invoice>> Create(
-        [FromBody] CreateInvoiceRequest request)
+        [FromBody] CreateInvoiceRequest request,
+        CancellationToken cancellationToken)
     {
-        foreach (var item in request.Items)
-        {
-            var product = await _inventoryServiceClient
-                .GetProductByIdAsync(item.ProductId);
+        List<CreateInvoiceItemRequest> items;
 
-            if (product is null)
-            {
-                return BadRequest(new
+        try
+        {
+            items = request.Items
+                .GroupBy(item => item.ProductId)
+                .Select(group => new CreateInvoiceItemRequest
                 {
-                    message = $"Product {item.ProductId} does not exist."
-                });
-            }
+                    ProductId = group.Key,
+                    Quantity = checked(group.Sum(item => item.Quantity))
+                })
+                .ToList();
+        }
+        catch (OverflowException)
+        {
+            return BadRequest(new
+            {
+                message = "The total quantity for a product is too large."
+            });
         }
 
-        var lastNumber = await _context.Invoices
-            .MaxAsync(i => (int?)i.Number) ?? 0;
+        try
+        {
+            foreach (var item in items)
+            {
+                var product = await _inventoryServiceClient
+                    .GetProductByIdAsync(item.ProductId, cancellationToken);
+
+                if (product is null)
+                {
+                    return BadRequest(new
+                    {
+                        message = $"Product {item.ProductId} does not exist."
+                    });
+                }
+            }
+        }
+        catch (HttpRequestException)
+        {
+            return InventoryUnavailable();
+        }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return InventoryUnavailable();
+        }
+
+        await using var transaction = await _context.Database
+            .BeginTransactionAsync(cancellationToken);
+
+        var sequence = await _context.InvoiceSequences
+            .FromSqlRaw("SELECT * FROM InvoiceSequences WHERE Id = 1 FOR UPDATE")
+            .SingleAsync(cancellationToken);
+
+        sequence.LastNumber++;
 
         var invoice = new Invoice
         {
-            Number = lastNumber + 1,
+            Number = sequence.LastNumber,
             Status = InvoiceStatus.Open,
             CreatedAt = DateTime.UtcNow,
-            Items = request.Items
+            Items = items
                 .Select(item => new InvoiceItem
                 {
                     ProductId = item.ProductId,
@@ -91,7 +133,8 @@ public class InvoicesController : ControllerBase
 
         _context.Invoices.Add(invoice);
 
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         return CreatedAtAction(
             nameof(GetById),
@@ -101,11 +144,13 @@ public class InvoicesController : ControllerBase
     }
 
     [HttpPost("{id:int}/print")]
-    public async Task<ActionResult> PrintInvoice(int id)
+    public async Task<ActionResult> PrintInvoice(
+        int id,
+        CancellationToken cancellationToken)
     {
         var invoice = await _context.Invoices
             .Include(i => i.Items)
-            .FirstOrDefaultAsync(i => i.Id == id);
+            .FirstOrDefaultAsync(i => i.Id == id, cancellationToken);
 
         if (invoice is null)
         {
@@ -125,6 +170,7 @@ public class InvoicesController : ControllerBase
 
         var stockRequest = new DecreaseStockRequest
         {
+            IdempotencyKey = $"billing-invoice-{invoice.Id}",
             Items = invoice.Items
                 .Select(item => new DecreaseStockItemRequest
                 {
@@ -136,12 +182,13 @@ public class InvoicesController : ControllerBase
 
         try
         {
-            var stockResponse = await _inventoryServiceClient
-                .DecreaseStockAsync(stockRequest);
+            using var stockResponse = await _inventoryServiceClient
+                .DecreaseStockAsync(stockRequest, cancellationToken);
 
             if (!stockResponse.IsSuccessStatusCode)
             {
-                var errorMessage = await stockResponse.Content.ReadAsStringAsync();
+                var errorMessage = await stockResponse.Content
+                    .ReadAsStringAsync(cancellationToken);
 
                 return StatusCode(
                     (int)stockResponse.StatusCode,
@@ -153,9 +200,25 @@ public class InvoicesController : ControllerBase
                 );
             }
 
-            invoice.Status = InvoiceStatus.Closed;
+            var updatedRows = await _context.Invoices
+                .Where(candidate =>
+                    candidate.Id == invoice.Id &&
+                    candidate.Status == InvoiceStatus.Open)
+                .ExecuteUpdateAsync(
+                    setters => setters.SetProperty(
+                        candidate => candidate.Status,
+                        InvoiceStatus.Closed),
+                    cancellationToken);
 
-            await _context.SaveChangesAsync();
+            if (updatedRows == 0)
+            {
+                return Conflict(new
+                {
+                    message = "The invoice was already closed."
+                });
+            }
+
+            invoice.Status = InvoiceStatus.Closed;
 
             return Ok(new
             {
@@ -165,13 +228,21 @@ public class InvoicesController : ControllerBase
         }
         catch (HttpRequestException)
         {
-            return StatusCode(
-                StatusCodes.Status503ServiceUnavailable,
-                new
-                {
-                    message = "Inventory service is temporarily unavailable."
-                }
-            );
+            return InventoryUnavailable();
         }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return InventoryUnavailable();
+        }
+    }
+
+    private ObjectResult InventoryUnavailable()
+    {
+        return StatusCode(
+            StatusCodes.Status503ServiceUnavailable,
+            new
+            {
+                message = "Inventory service is temporarily unavailable. Try again shortly."
+            });
     }
 }

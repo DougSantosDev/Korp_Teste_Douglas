@@ -7,18 +7,18 @@ export const routes: Routes = [
   {
     path: '',
     redirectTo: 'dashboard',
-    pathMatch: 'full'
+    pathMatch: 'full',
   },
   {
     path: 'dashboard',
-    component: Dashboard
+    component: Dashboard,
   },
   {
     path: 'products',
-    component: Products
+    component: Products,
   },
   {
     path: 'invoices',
-    component: Invoices
-  }
+    component: Invoices,
+  },
 ];

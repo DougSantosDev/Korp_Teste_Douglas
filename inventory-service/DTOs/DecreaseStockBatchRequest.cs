@@ -5,6 +5,10 @@ namespace InventoryService.DTOs;
 public class DecreaseStockBatchRequest
 {
     [Required]
+    [MaxLength(100)]
+    public string IdempotencyKey { get; set; } = string.Empty;
+
+    [Required]
     [MinLength(1)]
     public List<DecreaseStockItemRequest> Items { get; set; } = [];
 }

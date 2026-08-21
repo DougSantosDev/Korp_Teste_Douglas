@@ -19,20 +19,24 @@ public class ProductsController : ControllerBase
 
     // GET: /api/products
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<Product>>> GetAll()
+    public async Task<ActionResult<IEnumerable<Product>>> GetAll(
+        CancellationToken cancellationToken)
     {
         var products = await _context.Products
-            .ToListAsync();
+            .OrderBy(product => product.Code)
+            .ToListAsync(cancellationToken);
 
         return Ok(products);
     }
 
     // GET: /api/products/1
     [HttpGet("{id:int}")]
-    public async Task<ActionResult<Product>> GetById(int id)
+    public async Task<ActionResult<Product>> GetById(
+        int id,
+        CancellationToken cancellationToken)
     {
         var product = await _context.Products
-            .FirstOrDefaultAsync(p => p.Id == id);
+            .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
 
         if (product is null)
         {
@@ -48,10 +52,23 @@ public class ProductsController : ControllerBase
     // POST: /api/products
     [HttpPost]
     public async Task<ActionResult<Product>> Create(
-        [FromBody] Product product)
+        [FromBody] Product product,
+        CancellationToken cancellationToken)
     {
+        product.Code = product.Code.Trim();
+        product.Description = product.Description.Trim();
+
+        if (string.IsNullOrWhiteSpace(product.Code) ||
+            string.IsNullOrWhiteSpace(product.Description))
+        {
+            return BadRequest(new
+            {
+                message = "Code and description cannot be blank."
+            });
+        }
+
         var codeExists = await _context.Products
-            .AnyAsync(p => p.Code == product.Code);
+            .AnyAsync(p => p.Code == product.Code, cancellationToken);
 
         if (codeExists)
         {
@@ -63,7 +80,28 @@ public class ProductsController : ControllerBase
 
         _context.Products.Add(product);
 
-        await _context.SaveChangesAsync();
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            _context.ChangeTracker.Clear();
+
+            if (await _context.Products
+                .AsNoTracking()
+                .AnyAsync(
+                    candidate => candidate.Code == product.Code,
+                    cancellationToken))
+            {
+                return Conflict(new
+                {
+                    message = "A product with this code already exists."
+                });
+            }
+
+            throw;
+        }
 
         return CreatedAtAction(
             nameof(GetById),
@@ -75,23 +113,88 @@ public class ProductsController : ControllerBase
     // POST: /api/products/decrease-stock
     [HttpPost("decrease-stock")]
     public async Task<ActionResult> DecreaseStockBatch(
-        [FromBody] DecreaseStockBatchRequest request)
+        [FromBody] DecreaseStockBatchRequest request,
+        CancellationToken cancellationToken)
     {
-        await using var transaction =
-            await _context.Database.BeginTransactionAsync();
+        request.IdempotencyKey = request.IdempotencyKey.Trim();
+
+        if (string.IsNullOrWhiteSpace(request.IdempotencyKey))
+        {
+            return BadRequest(new
+            {
+                message = "IdempotencyKey is required."
+            });
+        }
+
+        List<DecreaseStockItemRequest> items;
 
         try
         {
-            foreach (var item in request.Items)
+            items = request.Items
+                .GroupBy(item => item.ProductId)
+                .Select(group => new DecreaseStockItemRequest
+                {
+                    ProductId = group.Key,
+                    Quantity = checked(group.Sum(item => item.Quantity))
+                })
+                .OrderBy(item => item.ProductId)
+                .ToList();
+        }
+        catch (OverflowException)
+        {
+            return BadRequest(new
             {
+                message = "The total quantity for a product is too large."
+            });
+        }
+
+        await using var transaction =
+            await _context.Database.BeginTransactionAsync(cancellationToken);
+
+        try
+        {
+            if (await _context.StockOperations.AnyAsync(
+                operation => operation.IdempotencyKey == request.IdempotencyKey,
+                cancellationToken))
+            {
+                await transaction.CommitAsync(cancellationToken);
+
+                return Ok(new
+                {
+                    message = "Stock had already been updated for this operation.",
+                    idempotentReplay = true
+                });
+            }
+
+            _context.StockOperations.Add(new StockOperation
+            {
+                IdempotencyKey = request.IdempotencyKey,
+                ProcessedAt = DateTime.UtcNow
+            });
+
+            await _context.SaveChangesAsync(cancellationToken);
+
+            foreach (var item in items)
+            {
+                var affectedRows = await _context.Database.ExecuteSqlInterpolatedAsync(
+                    $"UPDATE Products SET StockQuantity = StockQuantity - {item.Quantity} WHERE Id = {item.ProductId} AND StockQuantity >= {item.Quantity}",
+                    cancellationToken);
+
+                if (affectedRows == 1)
+                {
+                    continue;
+                }
+
                 var product = await _context.Products
+                    .AsNoTracking()
                     .FirstOrDefaultAsync(
-                        p => p.Id == item.ProductId
-                    );
+                        candidate => candidate.Id == item.ProductId,
+                        cancellationToken);
+
+                await transaction.RollbackAsync(cancellationToken);
 
                 if (product is null)
                 {
-                    await transaction.RollbackAsync();
 
                     return NotFound(new
                     {
@@ -100,31 +203,39 @@ public class ProductsController : ControllerBase
                     });
                 }
 
-                if (product.StockQuantity < item.Quantity)
+                return Conflict(new
                 {
-                    await transaction.RollbackAsync();
-
-                    return Conflict(new
-                    {
-                        message =
-                            $"Insufficient stock for product {product.Code}."
-                    });
-                }
-
-                product.StockQuantity -= item.Quantity;
+                    message =
+                        $"Insufficient stock for product {product.Code}."
+                });
             }
 
-            await _context.SaveChangesAsync();
-            await transaction.CommitAsync();
+            await transaction.CommitAsync(cancellationToken);
 
             return Ok(new
             {
-                message = "Stock updated successfully."
+                message = "Stock updated successfully.",
+                idempotentReplay = false
             });
         }
-        catch
+        catch (DbUpdateException)
         {
-            await transaction.RollbackAsync();
+            await transaction.RollbackAsync(cancellationToken);
+            _context.ChangeTracker.Clear();
+
+            if (await _context.StockOperations
+                .AsNoTracking()
+                .AnyAsync(
+                    operation => operation.IdempotencyKey == request.IdempotencyKey,
+                    cancellationToken))
+            {
+                return Ok(new
+                {
+                    message = "Stock had already been updated for this operation.",
+                    idempotentReplay = true
+                });
+            }
+
             throw;
         }
     }

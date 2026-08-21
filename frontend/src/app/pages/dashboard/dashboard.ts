@@ -1,5 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { finalize, forkJoin } from 'rxjs';
 
 import { ProductService } from '../../services/product.service';
 import { InvoiceService } from '../../services/invoice.service';
@@ -11,7 +12,7 @@ import { Invoice } from '../../models/invoice';
   standalone: true,
   imports: [CommonModule],
   templateUrl: './dashboard.html',
-  styleUrl: './dashboard.scss'
+  styleUrl: './dashboard.scss',
 })
 export class Dashboard implements OnInit {
   products: Product[] = [];
@@ -22,7 +23,7 @@ export class Dashboard implements OnInit {
 
   constructor(
     private productService: ProductService,
-    private invoiceService: InvoiceService
+    private invoiceService: InvoiceService,
   ) {}
 
   ngOnInit(): void {
@@ -33,29 +34,20 @@ export class Dashboard implements OnInit {
     this.loading = true;
     this.errorMessage = '';
 
-    this.productService.getAll().subscribe({
-      next: (products) => {
-        this.products = products;
-        this.loadInvoices();
-      },
-      error: () => {
-        this.errorMessage = 'Não foi possível carregar os dados do estoque.';
-        this.loading = false;
-      }
-    });
-  }
-
-  private loadInvoices(): void {
-    this.invoiceService.getAll().subscribe({
-      next: (invoices) => {
-        this.invoices = invoices;
-        this.loading = false;
-      },
-      error: () => {
-        this.errorMessage = 'Não foi possível carregar as notas fiscais.';
-        this.loading = false;
-      }
-    });
+    forkJoin({
+      products: this.productService.getAll(),
+      invoices: this.invoiceService.getAll(),
+    })
+      .pipe(finalize(() => (this.loading = false)))
+      .subscribe({
+        next: ({ products, invoices }) => {
+          this.products = products;
+          this.invoices = invoices;
+        },
+        error: () => {
+          this.errorMessage = 'Não foi possível carregar os dados do dashboard.';
+        },
+      });
   }
 
   get totalProducts(): number {
@@ -63,14 +55,10 @@ export class Dashboard implements OnInit {
   }
 
   get openInvoices(): number {
-    return this.invoices.filter(
-      invoice => invoice.status === 'Open'
-    ).length;
+    return this.invoices.filter((invoice) => invoice.status === 'Open').length;
   }
 
   get closedInvoices(): number {
-    return this.invoices.filter(
-      invoice => invoice.status === 'Closed'
-    ).length;
+    return this.invoices.filter((invoice) => invoice.status === 'Closed').length;
   }
 }
