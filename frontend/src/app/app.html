@@ -1,6 +1,35 @@
-<nav class="main-nav">
-  <a routerLink="/products">Produtos</a>
-  <a routerLink="/invoices">Notas Fiscais</a>
-</nav>
+<div class="app-layout">
+  <aside class="sidebar">
+    <div class="brand">
+      <h2>Korp ERP</h2>
+      <span>Inventory & Billing</span>
+    </div>
 
-<router-outlet></router-outlet>
+    <nav>
+      <a routerLink="/dashboard" routerLinkActive="active">
+        Dashboard
+      </a>
+
+      <a routerLink="/products" routerLinkActive="active">
+        Produtos
+      </a>
+
+      <a routerLink="/invoices" routerLinkActive="active">
+        Notas Fiscais
+      </a>
+    </nav>
+  </aside>
+
+  <main class="main-content">
+    <header class="topbar">
+      <div>
+        <strong>Sistema de Gestão</strong>
+        <span>Inventory & Billing</span>
+      </div>
+    </header>
+
+    <div class="page-content">
+      <router-outlet></router-outlet>
+    </div>
+  </main>
+</div>

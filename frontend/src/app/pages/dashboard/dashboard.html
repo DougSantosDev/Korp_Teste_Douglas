@@ -1,0 +1,83 @@
+<section class="dashboard-page">
+  <div class="page-header">
+    <div>
+      <h1>Dashboard</h1>
+      <p>Visão geral do estoque e faturamento.</p>
+    </div>
+  </div>
+
+  @if (loading) {
+    <p>Carregando informações...</p>
+  }
+
+  @if (errorMessage) {
+    <div class="error">
+      {{ errorMessage }}
+    </div>
+  }
+
+  @if (!loading && !errorMessage) {
+    <div class="cards">
+      <article class="card">
+        <span class="card-label">
+          Produtos cadastrados
+        </span>
+
+        <strong>
+          {{ totalProducts }}
+        </strong>
+
+        <small>
+          Itens disponíveis no catálogo
+        </small>
+      </article>
+
+      <article class="card">
+        <span class="card-label">
+          Notas abertas
+        </span>
+
+        <strong>
+          {{ openInvoices }}
+        </strong>
+
+        <small>
+          Aguardando impressão
+        </small>
+      </article>
+
+      <article class="card">
+        <span class="card-label">
+          Notas fechadas
+        </span>
+
+        <strong>
+          {{ closedInvoices }}
+        </strong>
+
+        <small>
+          Processadas com sucesso
+        </small>
+      </article>
+    </div>
+
+    <section class="summary-card">
+      <h2>Resumo operacional</h2>
+
+      <div class="summary-row">
+        <span>Total de notas fiscais</span>
+        <strong>{{ invoices.length }}</strong>
+      </div>
+
+      <div class="summary-row">
+        <span>Produtos cadastrados</span>
+        <strong>{{ products.length }}</strong>
+      </div>
+
+      <div class="summary-row">
+        <span>Notas aguardando processamento</span>
+        <strong>{{ openInvoices }}</strong>
+      </div>
+    </section>
+  }
+</section>
